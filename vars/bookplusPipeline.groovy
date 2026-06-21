@@ -15,6 +15,11 @@ def call(Map cfg = [:]) {
     String mavenImage = cfg.mavenImage ?: 'maven:3.9-eclipse-temurin-21'
     List<String> services = (cfg.services ?: Services.ALL) as List<String>
     String ghcrCreds = cfg.ghcrCredentialsId ?: 'ghcr'   // 'github-app' para tokens efímeros (pro)
+    String sonarOrg  = cfg.sonarOrganization ?: 'dhuarocc'
+    // El Quality Gate bloqueante necesita que SonarCloud llame de vuelta a Jenkins por webhook.
+    // En Jenkins local (no alcanzable desde internet) se omite la espera: el análisis igual se
+    // sube a SonarCloud. En producción (Jenkins con URL pública) pásalo a true.
+    boolean waitGate = cfg.waitForQualityGate != null ? cfg.waitForQualityGate : false
 
     pipeline {
         agent none
@@ -63,9 +68,15 @@ def call(Map cfg = [:]) {
                 steps {
                     unstash 'source'
                     withSonarQubeEnv('SonarCloud') {
-                        sh 'cd book-plus-order-service && mvn -B -q verify sonar:sonar'
+                        sh "cd book-plus-order-service && mvn -B -q verify sonar:sonar -Dsonar.organization=${sonarOrg}"
                     }
-                    timeout(time: 10, unit: 'MINUTES') { waitForQualityGate abortPipeline: true }
+                    script {
+                        if (waitGate) {
+                            timeout(time: 10, unit: 'MINUTES') { waitForQualityGate abortPipeline: true }
+                        } else {
+                            echo 'Quality Gate: análisis subido a SonarCloud. Espera de gate omitida (Jenkins local sin webhook público). Actívala con waitForQualityGate:true en producción.'
+                        }
+                    }
                 }
             }
 
