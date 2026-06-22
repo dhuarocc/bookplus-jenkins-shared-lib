@@ -85,6 +85,8 @@ def call(Map cfg = [:]) {
                 steps {
                     unstash 'source'
                     sh "set -e; for s in ${services.join(' ')}; do (cd \"\$s\" && mvn -B -q -DskipTests package); done"
+                    // build-once: guardamos los JAR para reusarlos al construir las imágenes
+                    stash name: 'jars', includes: '**/target/*.jar'
                 }
             }
 
@@ -93,11 +95,13 @@ def call(Map cfg = [:]) {
                 agent any
                 steps {
                     unstash 'source'
+                    unstash 'jars'    // JAR ya construidos en Package (no se recompila)
                     withCredentials([usernamePassword(credentialsId: ghcrCreds, usernameVariable: 'U', passwordVariable: 'P')]) {
                         script {
                             sh 'echo "$P" | docker login ghcr.io -u "$U" --password-stdin'
                             parallel services.collectEntries { s -> ["image:${s}", {
-                                sh "docker build -t ${registry}/${s}:${env.SHORT_SHA} ${s} && docker push ${registry}/${s}:${env.SHORT_SHA}"
+                                // Dockerfile.runtime solo copia el JAR -> build en segundos
+                                sh "docker build -f Dockerfile.runtime -t ${registry}/${s}:${env.SHORT_SHA} ${s} && docker push ${registry}/${s}:${env.SHORT_SHA}"
                             }] }
                         }
                     }
