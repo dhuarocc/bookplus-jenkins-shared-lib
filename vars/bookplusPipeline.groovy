@@ -100,8 +100,18 @@ def call(Map cfg = [:]) {
                         script {
                             sh 'echo "$P" | docker login ghcr.io -u "$U" --password-stdin'
                             parallel services.collectEntries { s -> ["image:${s}", {
-                                // Dockerfile.runtime solo copia el JAR -> build en segundos
-                                sh "docker build -f Dockerfile.runtime -t ${registry}/${s}:${env.SHORT_SHA} ${s} && docker push ${registry}/${s}:${env.SHORT_SHA}"
+                                // Contexto MÍNIMO: solo el JAR (no toda la carpeta target con miles de .class).
+                                // Evita que el envío de contexto a Docker Desktop (Windows) tarde minutos.
+                                sh """
+                                    set -e
+                                    ctx=\$(mktemp -d)
+                                    mkdir -p "\$ctx/target"
+                                    cp ${s}/target/*.jar "\$ctx/target/"
+                                    cp Dockerfile.runtime "\$ctx/"
+                                    docker build -f "\$ctx/Dockerfile.runtime" -t ${registry}/${s}:${env.SHORT_SHA} "\$ctx"
+                                    docker push ${registry}/${s}:${env.SHORT_SHA}
+                                    rm -rf "\$ctx"
+                                """
                             }] }
                         }
                     }
