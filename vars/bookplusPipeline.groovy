@@ -99,6 +99,9 @@ def call(Map cfg = [:]) {
                     withCredentials([usernamePassword(credentialsId: ghcrCreds, usernameVariable: 'U', passwordVariable: 'P')]) {
                         script {
                             sh 'echo "$P" | docker login ghcr.io -u "$U" --password-stdin'
+                            // Pre-descargar la imagen base UNA vez (no 9 pulls en paralelo).
+                            // timeout para fallar rápido si Docker Hub no responde / rate limit.
+                            sh 'timeout 600 docker pull eclipse-temurin:21-jre-alpine'
                             parallel services.collectEntries { s -> ["image:${s}", {
                                 // Contexto MÍNIMO: solo el JAR (no toda la carpeta target con miles de .class).
                                 // Evita que el envío de contexto a Docker Desktop (Windows) tarde minutos.
