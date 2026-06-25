@@ -35,7 +35,7 @@ def call(Map cfg = [:]) {
             ansiColor('xterm')
             disableConcurrentBuilds()
             buildDiscarder(logRotator(numToKeepStr: '20'))
-            timeout(time: 60, unit: 'MINUTES')
+            timeout(time: 180, unit: 'MINUTES')   // margen para subidas lentas a GHCR en local
             skipDefaultCheckout(true)
         }
 
@@ -102,20 +102,21 @@ def call(Map cfg = [:]) {
                             // Pre-descargar la imagen base UNA vez (no 9 pulls en paralelo).
                             // timeout para fallar rápido si Docker Hub no responde / rate limit.
                             sh 'timeout 600 docker pull eclipse-temurin:21-jre-alpine'
-                            parallel services.collectEntries { s -> ["image:${s}", {
-                                // Contexto MÍNIMO: solo el JAR (no toda la carpeta target con miles de .class).
-                                // Evita que el envío de contexto a Docker Desktop (Windows) tarde minutos.
+                            // SECUENCIAL a propósito: el primer push sube la capa base; los
+                            // siguientes la reutilizan ("already exists") y solo suben su JAR.
+                            // En paralelo, las 9 subirían la base a la vez y saturan el upload.
+                            for (svc in services) {
                                 sh """
                                     set -e
                                     ctx=\$(mktemp -d)
                                     mkdir -p "\$ctx/target"
-                                    cp ${s}/target/*.jar "\$ctx/target/"
+                                    cp ${svc}/target/*.jar "\$ctx/target/"
                                     cp Dockerfile.runtime "\$ctx/"
-                                    docker build -f "\$ctx/Dockerfile.runtime" -t ${registry}/${s}:${env.SHORT_SHA} "\$ctx"
-                                    docker push ${registry}/${s}:${env.SHORT_SHA}
+                                    docker build -f "\$ctx/Dockerfile.runtime" -t ${registry}/${svc}:${env.SHORT_SHA} "\$ctx"
+                                    docker push ${registry}/${svc}:${env.SHORT_SHA}
                                     rm -rf "\$ctx"
                                 """
-                            }] }
+                            }
                         }
                     }
                 }
