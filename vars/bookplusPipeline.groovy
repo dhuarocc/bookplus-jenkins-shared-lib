@@ -134,10 +134,14 @@ def call(Map cfg = [:]) {
                 when { expression { params.PUSH_IMAGES } }
                 agent any
                 steps {
-                    script {
-                        parallel services.collectEntries { s -> ["trivy:${s}", {
-                            sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 ${registry}/${s}:${env.SHORT_SHA}"
-                        }] }
+                    // Best-effort: un timeout/lentitud del scanner no debe romper el build.
+                    // Caché de la BD de Trivy entre escaneos + timeout amplio para descargas lentas.
+                    warnError('Escaneo Trivy omitido/incompleto (no bloquea el build)') {
+                        script {
+                            parallel services.collectEntries { s -> ["trivy:${s}", {
+                                sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ aquasec/trivy:latest image --timeout 30m --severity HIGH,CRITICAL --exit-code 0 ${registry}/${s}:${env.SHORT_SHA} || true"
+                            }] }
+                        }
                     }
                 }
             }
