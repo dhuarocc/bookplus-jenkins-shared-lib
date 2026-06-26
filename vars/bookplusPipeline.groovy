@@ -26,7 +26,10 @@ def call(Map cfg = [:]) {
 
         parameters {
             booleanParam(name: 'RUN_SONAR',   defaultValue: true, description: 'Análisis + Quality Gate de SonarCloud')
-            booleanParam(name: 'PUSH_IMAGES', defaultValue: true, description: 'Construir y publicar imágenes en GHCR')
+            // Por defecto NO se publican imágenes desde Jenkins: de eso se encarga GitHub Actions
+            // (su GITHUB_TOKEN sí puede crear paquetes de organización; una GitHub App no).
+            // Jenkins valida (build/test/sonar/package). Márcalo solo si pusheas a paquetes ya creados.
+            booleanParam(name: 'PUSH_IMAGES', defaultValue: false, description: 'Publicar imágenes en GHCR (normalmente lo hace GitHub Actions)')
             choice(name: 'DEPLOY_ENV', choices: ['none', 'staging', 'production'], description: 'Entorno de despliegue')
         }
 
