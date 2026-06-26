@@ -97,6 +97,10 @@ def call(Map cfg = [:]) {
                 when { expression { params.PUSH_IMAGES } }
                 agent any
                 steps {
+                    // Best-effort: la publicación "oficial" la hace GitHub Actions. Si el push
+                    // desde Jenkins falla (p. ej. la GitHub App no puede CREAR paquetes de org),
+                    // se marca la etapa como inestable pero el build NO se rompe.
+                    warnError('Publicación de imágenes desde Jenkins omitida/fallida (la realiza GitHub Actions)') {
                     unstash 'source'
                     unstash 'jars'    // JAR ya construidos en Package (no se recompila)
                     withCredentials([usernamePassword(credentialsId: ghcrCreds, usernameVariable: 'U', passwordVariable: 'P')]) {
@@ -122,6 +126,7 @@ def call(Map cfg = [:]) {
                             }
                         }
                     }
+                    } // warnError
                 }
             }
 
